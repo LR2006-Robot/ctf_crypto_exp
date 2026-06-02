@@ -66,6 +66,8 @@ class ZUC:
             W = self.F(self.X[0], self.X[1], self.X[2])
             self.LFSRWithInitialisationMode(W >> 1)   # 用 W 的高 31 位
 
+        self.BitReconstruction()
+        self.F(self.X[0], self.X[1], self.X[2])
 
     def LFSRWithInitialisationMode(self, u):
         v = (2**15*self.s[15]+2**17*self.s[13]+2**21*self.s[10]+2**20*self.s[4]+(1+2**8)*self.s[0]) % LFSR_MOD
@@ -140,6 +142,7 @@ class ZUC:
                 W = self.F(self.X[0], self.X[1], self.X[2])
                 Z = W ^ self.X[3]
                 self.LFSRWithWorkMode()
+                print(f'Z{i} = {hex(Z)[2:]}')
             ciphertext.append(plaintext[i] ^ (Z >> (24 - 8 * (i % 4))) & 0xff)
         return bytes(ciphertext)
 
@@ -147,4 +150,11 @@ key = b'0' * 16
 iv = b'0' * 16
 zuc = ZUC(key, iv)
 
+plaintext = b"Hello, ZUC!"
+ciphertext = zuc.encrypt(plaintext)
+print("密文:", ciphertext.hex())
 
+# 解密（流密码加解密一样，新建同样 key/iv 的实例再 encrypt 一次即可）
+zuc2 = ZUC(key, iv)
+decrypted = zuc2.encrypt(ciphertext)
+print("解密:", decrypted)  # b"Hello, ZUC!"
