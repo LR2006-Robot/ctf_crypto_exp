@@ -36,12 +36,18 @@ d=[ 0b100010011010111,0b010011010111100,0b110001001101011,0b001001101011110,
     0b101011110001001,0b011010111100010,0b111000100110101,0b000100110101111,
     0b100110101111000,0b010111100010011,0b110101111000100,0b001101011110001,
     0b101111000100110,0b011110001001101,0b111100010011010,0b100011110101100]
+MASK32 = 0xFFFFFFFF    # 模 2^32 掩码
+LFSR_MOD = 0x7FFFFFFF  # 模 2^31 - 1
+
+
+def rotl32(x, n):
+    return ((x << n) | (x >> (32 - n))) & 0xFFFFFFFF
 
 class ZUC:
     def __init__(self, key, iv):   # key和iv均为16字节（128比特）的输入
         self.s = [0] * 16 # 线性反馈移位寄存器的16个31比特寄存器单元变量
         self.X = [0] * 4  # 比特重组输出的4个32比特字
-        self.mod32 = 0xffffffff
+
         self.R1 = 0
         self.R2 = 0
 
@@ -55,18 +61,24 @@ class ZUC:
         for i in range(16):
             self.s[i] = (k[i] << 23) | (d[i] << 8) | iv_[i]
 
+        for _ in range(32):
+            self.BitReconstruction()
+            W = self.F(self.X[0], self.X[1], self.X[2])
+            self.LFSRWithInitialisationMode(W >> 1)   # 用 W 的高 31 位
+
 
     def LFSRWithInitialisationMode(self, u):
-        v = 2**15*self.s[15]+2**17*self.s[13]+2**21*self.s[10]+2**20*self.s[4]+(1+2**8)*self.s[0] % (2**31-1)
-        self.s.append((v+u) % (2**31-1))
+        v = (2**15*self.s[15]+2**17*self.s[13]+2**21*self.s[10]+2**20*self.s[4]+(1+2**8)*self.s[0]) % LFSR_MOD
+        self.s.append((v+u) % LFSR_MOD)
         if self.s[16] == 0:
-            self.s[16] = 2**31-1
+            self.s[16] = LFSR_MOD
         self.s.pop(0)
 
     def LFSRWithWorkMode(self):
-        self.s[16] = (2**15*self.s[15]+2**17*self.s[13]+2**21*self.s[10]+2**20*self.s[4]+(1+2**8)*self.s[0]) % (2**31-1)
-        if self.s[16] == 0:
-            self.s[16] = 2**31-1
+        v = (2**15*self.s[15]+2**17*self.s[13]+2**21*self.s[10]+2**20*self.s[4]+(1+2**8)*self.s[0]) % LFSR_MOD
+        if v == 0:
+            v = LFSR_MOD
+        self.s.append(v)
         self.s.pop(0)
 
     def BitReconstruction(self):
@@ -85,13 +97,13 @@ class ZUC:
         self.X[3] = ((self.s[2] & 0xffff) << 16) | (self.s[0] >> 15)
 
     def F(self, X0, X1, X2):
-        W = (X0 ^ self.R1) + self.R2 % self.mod32
-        W1 = self.R1 + X1 % self.mod32
-        W2 = self.R2 ^ X2 % self.mod32
+        W  = ((X0 ^ self.R1) + self.R2) & MASK32
+        W1 = (self.R1 + X1) & MASK32
+        W2 = (self.R2 ^ X2) & MASK32
 
-        L1_X = (W1 << 16 | W2 >> 16) % self.mod32
-        L2_X = (W2 << 16 | W1 >> 16) % self.mod32
-        
+        L1_X = (W1 << 16 | W2 >> 16) & MASK32
+        L2_X = (W2 << 16 | W1 >> 16) & MASK32
+
         u = self.L1(L1_X)
         v = self.L2(L2_X)
         self.R1 = self._S(u)
@@ -113,11 +125,12 @@ class ZUC:
                 b8[i] = S1[row][col] # i=1,3时使用S1
         return (b8[0] << 24) | (b8[1] << 16) | (b8[2] << 8) | b8[3]
 
+
     def L1(self, L1_X):
-        return (L1_X ^ (L1_X << 2) ^ (L1_X << 10) ^ (L1_X << 18) ^ (L1_X << 24)) % self.mod32
+        return L1_X ^ rotl32(L1_X, 2) ^ rotl32(L1_X, 10) ^ rotl32(L1_X,18) ^ rotl32(L1_X,24)
 
     def L2(self, L2_X):
-        return (L2_X ^ (L2_X << 8) ^ (L2_X << 14) ^ (L2_X << 22) ^ (L2_X << 30)) % self.mod32
+        return L2_X ^ rotl32(L2_X, 8) ^ rotl32(L2_X, 14) ^ rotl32(L2_X, 22) ^ rotl32(L2_X, 30)
 
     def encrypt(self, plaintext):
         ciphertext = bytearray()
@@ -125,8 +138,9 @@ class ZUC:
             if i % 4 == 0:
                 self.BitReconstruction()
                 W = self.F(self.X[0], self.X[1], self.X[2])
+                Z = W ^ self.X[3]
                 self.LFSRWithWorkMode()
-            ciphertext.append(plaintext[i] ^ (W >> (24 - 8 * (i % 4))) & 0xff)
+            ciphertext.append(plaintext[i] ^ (Z >> (24 - 8 * (i % 4))) & 0xff)
         return bytes(ciphertext)
 
 key = b'0' * 16
