@@ -68,6 +68,7 @@ class ZUC:
 
         self.BitReconstruction()
         self.F(self.X[0], self.X[1], self.X[2])
+        self.LFSRWithWorkMode()
 
     def LFSRWithInitialisationMode(self, u):
         v = (2**15*self.s[15]+2**17*self.s[13]+2**21*self.s[10]+2**20*self.s[4]+(1+2**8)*self.s[0]) % LFSR_MOD
@@ -86,7 +87,7 @@ class ZUC:
     def BitReconstruction(self):
         # X0 = S15的高16位 | S14的低16位
         # 0x7fff8000 是第 30-15 位，左移 1 位正好到 31-16 位
-        self.X[0] = ((self.s[15] & 0x7fff8000) << 1) | (self.s[14] & 0xffff)
+        self.X[0] = ((self.s[15] >> 15) << 16) | (self.s[14] & 0xffff)
 
         # X1 = S11的低16位 | S9的高16位
         # 低16位左移16位到高处，高16位右移15位到低处
@@ -103,8 +104,8 @@ class ZUC:
         W1 = (self.R1 + X1) & MASK32
         W2 = (self.R2 ^ X2) & MASK32
 
-        L1_X = (W1 << 16 | W2 >> 16) & MASK32
-        L2_X = (W2 << 16 | W1 >> 16) & MASK32
+        L1_X = ((W1 & 0xffff) << 16) | (W2 >> 16)
+        L2_X = ((W2 & 0xffff) << 16) | (W1 >> 16)
 
         u = self.L1(L1_X)
         v = self.L2(L2_X)
@@ -137,24 +138,25 @@ class ZUC:
     def encrypt(self, plaintext):
         ciphertext = bytearray()
         for i in range(len(plaintext)):
-            if i % 4 == 0:
-                self.BitReconstruction()
-                W = self.F(self.X[0], self.X[1], self.X[2])
-                Z = W ^ self.X[3]
-                self.LFSRWithWorkMode()
-                print(f'Z{i} = {hex(Z)[2:]}')
+            self.BitReconstruction()
+            W = self.F(self.X[0], self.X[1], self.X[2])
+            Z = W ^ self.X[3]
+            self.LFSRWithWorkMode()
+            print(f'Z{i} = {hex(Z)[2:]}')
             ciphertext.append(plaintext[i] ^ (Z >> (24 - 8 * (i % 4))) & 0xff)
         return bytes(ciphertext)
+    
+    def decrypt(self, ciphertext):
+        return self.encrypt(ciphertext)  # ZUC 的加密和解密过程相同
 
-key = b'0' * 16
-iv = b'0' * 16
+key = b'\x3d\x4c\x4b\xe9\x6a\x82\xfd\xae\xb5\x8f\x64\x1d\xb1\x7b\x45\x5b'
+iv = b'\x84\x31\x9a\xa8\xde\x69\x15\xca\x1f\x6b\xda\x6b\xfb\xd8\xc7\x66'
 zuc = ZUC(key, iv)
 
-plaintext = b"Hello, ZUC!"
+plaintext = b"Hello"
 ciphertext = zuc.encrypt(plaintext)
 print("密文:", ciphertext.hex())
 
-# 解密（流密码加解密一样，新建同样 key/iv 的实例再 encrypt 一次即可）
 zuc2 = ZUC(key, iv)
 decrypted = zuc2.encrypt(ciphertext)
-print("解密:", decrypted)  # b"Hello, ZUC!"
+print("解密:", decrypted)  
