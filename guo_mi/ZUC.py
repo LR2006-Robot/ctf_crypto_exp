@@ -40,7 +40,7 @@ MASK32 = 0xFFFFFFFF    # 模 2^32 掩码
 LFSR_MOD = 0x7FFFFFFF  # 模 2^31 - 1
 
 
-def rotl32(x, n):
+def rotl32(x, n):   # 循环左移函数，x为32位整数，n为左移位数
     return ((x << n) | (x >> (32 - n))) & 0xFFFFFFFF
 
 class ZUC:
