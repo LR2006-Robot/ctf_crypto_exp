@@ -16,4 +16,18 @@ MAC2:
 -----------------------------------------------------
 请输入您的MSG3(64字节，128个Hex，不要添加空格！)(Please input your 64bytes MSG3(64 bytes,128 hexs,don't using space)):
 '''                                                               
+from Crypto.Util.number import *
 
+msg1 = bytes.fromhex("e55e3e24a3ae7797808fdca05a16ac15eb5fa2e6185c23a814a35ba32b4637c2")
+mac1 = bytes.fromhex("0712c867aa6ec7c1bb2b66312367b2c8")
+msg2 = bytes.fromhex("d8d94f33797e1f41cab9217793b2d0f02b93d46c2ead104dce4bfec453767719")
+mac2 = bytes.fromhex("43669127ae268092c056fd8d03b38b5b")
+
+m = int(msg2[:16].hex(),16) ^ int(mac1.hex(),16)
+m = long_to_bytes(m)
+flag = msg1 + m + msg2[16:]
+print(flag.hex())
+
+# msg3 = bytes.fromhex('e55e3e24a3ae7797808fdca05a16ac15eb5fa2e6185c23a814a35ba32b4637c2dfcb8754d310d88071924746b0d562382b93d46c2ead104dce4bfec453767719')
+# print(msg3 == flag)
+# print(msg3)
